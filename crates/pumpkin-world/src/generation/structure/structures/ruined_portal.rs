@@ -299,23 +299,14 @@ pub struct RuinedPortalGenerator {
 }
 
 impl StructureGenerator for RuinedPortalGenerator {
-    /// Vanilla `RuinedPortalStructure.findGenerationPoint`:
-    ///
-    /// ```java
-    /// // (weighted setup draw only when setups.size() > 1)
-    /// boolean airPocket = sample(random, setup.airPocketProbability());
-    /// if (random.nextFloat() < 0.05F) templateLocation = GIANT_PORTALS[random.nextInt(3)];
-    /// else                            templateLocation = PORTALS[random.nextInt(10)];
-    /// Rotation rotation = Util.getRandom(Rotation.values(), random);
-    /// Mirror mirror = random.nextFloat() < 0.5F ? Mirror.NONE : Mirror.FRONT_BACK;
-    /// BlockPos pivot = new BlockPos(template.getSize().getX() / 2, 0, template.getSize().getZ() / 2);
-    /// BlockPos basePosition = context.chunkPos().getWorldPosition();
-    /// BoundingBox boundingBox = template.getBoundingBox(basePosition, rotation, pivot, mirror);
-    /// BlockPos center = boundingBox.getCenter();
-    /// int surfaceY = chunkGenerator.getBaseHeight(center.getX(), center.getZ(), ...) - 1;
-    /// int projectedY = findSuitableY(random, ..., boundingBox.getYSpan(), boundingBox, ...);
-    /// BlockPos origin = new BlockPos(basePosition.getX(), projectedY, basePosition.getZ());
-    /// ```
+    /// Vanilla `RuinedPortalStructure.findGenerationPoint`, draw for draw: a weighted setup pick
+    /// (only when there is more than one setup), the air-pocket coin, then a `nextFloat` against
+    /// 0.05 choosing between the three giant portal templates and the ten normal ones and a
+    /// `nextInt` over that list, a random rotation off the four values, and a `nextFloat` against
+    /// 0.5 for the front-back mirror. The pivot is half the template size on X and Z, the base
+    /// position is the chunk's world position, and the bounding box is the template's under that
+    /// rotation, pivot and mirror. The surface height is sampled at the centre of that box, and
+    /// the vertical search returns the Y the origin takes, keeping the base position's X and Z.
     ///
     /// The piece sits at the chunk's *corner*, the pivot is only the rotation pivot, and the
     /// surface is sampled at the centre of the rotated bounding box, not at the chunk centre.
@@ -574,14 +565,9 @@ impl RuinedPortalPiece {
                     }
                 }
 
-                // `StructureTemplate.placeInWorld`, inside the placement loop:
-                //
-                //     if (blockInfo.nbt != null) {
-                //         BlockEntity blockEntity = level.getBlockEntity(blockPos);
-                //         if (blockEntity != null && blockEntity instanceof RandomizableContainer) {
-                //             blockInfo.nbt.putLong("LootTableSeed", random.nextLong());
-                //         }
-                //     }
+                // Inside `StructureTemplate.placeInWorld`'s placement loop, a block that carries NBT
+                // and resolves to a randomizable container gets a `LootTableSeed` written into that
+                // NBT, drawn as a `nextLong`.
                 //
                 // The seed comes off the *feature* random, so the chest every ruined portal
                 // ships costs the piece one `nextLong()` before `spreadNetherrack` runs.
@@ -797,16 +783,10 @@ impl StructurePieceBase for RuinedPortalPiece {
         }
     }
 
-    /// The tail of vanilla `RuinedPortalPiece.postProcess`. Everything after
-    /// `super.postProcess` writes straight through the `WorldGenLevel`, with no chunk
-    /// bounding box in the way:
-    ///
-    /// ```java
-    /// chunkBB.encapsulate(boundingBox);
-    /// super.postProcess(level, structureManager, generator, random, chunkBB, chunkPos, referencePos);
-    /// this.spreadNetherrack(random, level);
-    /// this.addNetherrackDripColumnsBelowPortal(random, level);
-    /// ```
+    /// The tail of vanilla `RuinedPortalPiece.postProcess`. It first grows the chunk bounding box
+    /// to encapsulate the piece's own, and everything after the `super.postProcess` call — the
+    /// netherrack spread and the drip columns below the portal — writes straight through the
+    /// `WorldGenLevel`, with no chunk bounding box in the way,
     ///
     /// so the netherrack mound reaches up to 14 blocks past the piece, into chunks the
     /// piece itself never touches.
@@ -957,18 +937,9 @@ mod tests {
     use pumpkin_data::structures::StructureKeys;
     use pumpkin_util::math::block_box::BlockBox;
 
-    /// `RuinedPortalStructure.findGenerationPoint` anchors the piece at the chunk's corner:
-    ///
-    /// ```java
-    /// BlockPos basePosition = context.chunkPos().getWorldPosition();
-    /// ...
-    /// BlockPos origin = new BlockPos(basePosition.getX(), projectedY, basePosition.getZ());
-    /// ```
-    ///
-    /// `ChunkPos.getWorldPosition()` is `new BlockPos(getMinBlockX(), 0, getMinBlockZ())`, and
-    /// the pivot only turns the template — it never shifts the origin. Pumpkin used to place
-    /// the template at `chunkCentre - pivot`, which moved every ruined portal (and the
-    /// netherrack mound around it) by up to a chunk.
+    /// `RuinedPortalStructure.findGenerationPoint` anchors the piece at the chunk's corner: the
+    /// origin keeps the chunk's minimum block X and Z, only its Y comes from the vertical search,
+    /// and the pivot turns the template without shifting the origin.
     #[test]
     fn a_ruined_portal_is_anchored_at_the_chunk_corner() {
         for (chunk_x, chunk_z) in [(0, 15), (-3, 7), (12, -5)] {
@@ -1009,12 +980,8 @@ mod tests {
         assert_eq!(setups_for(StructureKeys::RuinedPortalMountain).len(), 2);
     }
 
-    /// Vanilla `BoundingBox.getCenter()` uses the inclusive spans, so an even span lands one
-    /// block past the midpoint of the corners:
-    ///
-    /// ```java
-    /// new BlockPos(this.minX() + this.getXSpan() / 2, ..., this.minZ() + this.getZSpan() / 2)
-    /// ```
+    /// Vanilla `BoundingBox.getCenter()` is `min + span / 2` per axis over the *inclusive* spans,
+    /// so an even span lands one block past the midpoint of the corners.
     #[test]
     fn a_bounding_box_centre_uses_the_inclusive_span() {
         // The desert portal of chunk (0, 15): x 0..9 (span 10), z 240..246 (span 7).

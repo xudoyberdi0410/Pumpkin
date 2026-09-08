@@ -232,16 +232,9 @@ impl BlockBox {
         self.max.y - self.min.y + 1
     }
 
-    /// Vanilla `BoundingBox.getCenter()`:
-    ///
-    /// ```java
-    /// return new BlockPos(this.minX() + this.getXSpan() / 2,
-    ///                     this.minY() + this.getYSpan() / 2,
-    ///                     this.minZ() + this.getZSpan() / 2);
-    /// ```
-    ///
-    /// The span is inclusive (`max - min + 1`), so on an even span this sits one block
-    /// past the arithmetic midpoint of the corners.
+    /// Matches vanilla's `BoundingBox.getCenter()`: every axis is `min + span / 2`, and the
+    /// span is inclusive (`max - min + 1`), so on an even span this sits one block past the
+    /// arithmetic midpoint of the corners.
     #[must_use]
     pub const fn center(&self) -> Vector3<i32> {
         Vector3::new(

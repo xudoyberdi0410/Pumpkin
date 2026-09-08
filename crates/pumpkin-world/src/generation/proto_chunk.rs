@@ -461,24 +461,11 @@ impl ProtoChunk {
         });
     }
 
-    /// Vanilla `Heightmap.update` after the block at `y` in this column was written:
-    ///
-    /// ```java
-    /// int i = this.getFirstAvailable(x, z);
-    /// if (y <= i - 2) return false;
-    /// if (this.isOpaque.test(state)) {
-    ///     if (y >= i) { this.setHeight(x, z, y + 1); return true; }
-    /// } else if (i - 1 == y) {
-    ///     for (int j = y - 1; j >= this.chunk.getMinY(); j--) {
-    ///         if (this.isOpaque.test(this.chunk.getBlockState(mutable.set(x, j, z)))) {
-    ///             this.setHeight(x, z, j + 1);
-    ///             return true;
-    ///         }
-    ///     }
-    ///     this.setHeight(x, z, this.chunk.getMinY());
-    ///     return true;
-    /// }
-    /// ```
+    /// Vanilla `Heightmap.update` after the block at `y` in this column was written, against the
+    /// column's first available slot: a write more than one block below it changes nothing; a
+    /// matching block at or above it lifts the map to `y + 1`; and a non-matching write to the
+    /// top block itself scans down from `y - 1` for the next matching block, setting the map
+    /// just above it, or to the chunk's minimum Y if the column holds none.
     ///
     /// Pumpkin stores the top matching block itself rather than the first free slot above it,
     /// so `first_available == current + 1`. Overwriting the top of a column with something the
@@ -569,12 +556,9 @@ impl ProtoChunk {
     }
 
     /// Vanilla `Heightmap.primeHeightmaps` for `ChunkStatus.FINAL_HEIGHTMAPS`, which
-    /// `ChunkStatusTasks.generateFeatures` runs before any feature is placed:
-    ///
-    /// ```java
-    /// Heightmap.primeHeightmaps(chunk, EnumSet.of(MOTION_BLOCKING, MOTION_BLOCKING_NO_LEAVES,
-    ///                                             OCEAN_FLOOR, WORLD_SURFACE));
-    /// ```
+    /// `ChunkStatusTasks.generateFeatures` runs before any feature is placed. It primes exactly
+    /// four maps: `MOTION_BLOCKING`, `MOTION_BLOCKING_NO_LEAVES`, `OCEAN_FLOOR` and
+    /// `WORLD_SURFACE`.
     pub fn prime_final_heightmaps(&mut self) {
         for local_x in 0..CHUNK_DIM as i32 {
             for local_z in 0..CHUNK_DIM as i32 {
@@ -1483,12 +1467,8 @@ impl ProtoChunk {
         }
 
         // Vanilla `ChunkGenerator.applyBiomeDecoration` walks the structure registry
-        // once per decoration step and reseeds before each structure:
-        //     for (Structure s : structuresByStep.getOrDefault(stepIndex, List.of())) {
-        //         random.setFeatureSeed(decorationSeed, index, stepIndex);
-        //         startsForStructure(sectionPos, s).forEach(start -> start.placeInChunk(..., random, ...));
-        //         index++;
-        //     }
+        // once per decoration step, reseeding the feature random from the decoration seed, the
+        // running index and the step index before placing that structure's starts in the chunk.
         // `index` is the structure's position inside its step's list in registry
         // order, i.e. resource-location order, and it is counted for every
         // structure of the step whether or not the chunk holds a start of it.
@@ -1939,16 +1919,8 @@ impl GenerationCache for ProtoChunk {
 ///
 /// `ChunkGenerator.applyBiomeDecoration` groups the whole structure registry by
 /// `structure.step().ordinal()` and walks each step's list in registry order,
-/// counting one index per structure whether or not the chunk holds a start of it:
-///
-/// ```text
-/// int index = 0;
-/// for (Structure s : structuresByStep.getOrDefault(stepIndex, List.of())) {
-///     random.setFeatureSeed(decorationSeed, index, stepIndex);
-///     ...
-///     index++;
-/// }
-/// ```
+/// seeding the feature random from the decoration seed, the running index and the step index,
+/// and counting one index per structure whether or not the chunk holds a start of it.
 ///
 /// The structure registry is data-driven, so its iteration order is the
 /// resource-location order that `StructureKeys::all_names` is generated in.

@@ -169,15 +169,12 @@ fn place_fossil_template<T: GenerationCache>(
     random: &mut RandomGenerator,
     placement_box: &BlockBox,
 ) {
-    // `StructureTemplate.placeInWorld` opens with
-    // `settings.getRandomPalette(this.palettes, position).blocks()`, and
-    // `StructurePlaceSettings.getRandomPalette` is unconditional:
-    //
-    //     return palettes.get(this.getRandom(pos).nextInt(paletteSize));
-    //
-    // so a single-palette template still burns one `nextInt(1)` off the feature random
-    // before the first block-rot draw. `placeInWorld` bails out first when there is no
-    // palette at all (`if (this.palettes.isEmpty()) return false;`).
+    // `StructureTemplate.placeInWorld` opens by asking `StructurePlaceSettings.getRandomPalette`
+    // for the palette to read, and that pick is unconditional: it indexes the palette list with
+    // `nextInt(palette_count)` off the settings' position-seeded random, however many palettes
+    // there are. So a single-palette template still burns one `nextInt(1)` off the feature random
+    // before the first block-rot draw. `placeInWorld` bails out earlier still when the template
+    // has no palette at all.
     let palette_count = template.palettes.len();
     if palette_count == 0 {
         return;
@@ -223,22 +220,9 @@ mod tests {
     use pumpkin_util::random::{RandomGenerator, RandomImpl, xoroshiro128::Xoroshiro};
     use pumpkin_util::world_seed::Seed;
 
-    /// `StructureTemplate.placeInWorld` reads its block list through
-    ///
-    /// ```java
-    /// List<StructureBlockInfo> blockInfoList = settings.getRandomPalette(this.palettes, position).blocks();
-    /// ```
-    ///
-    /// and `StructurePlaceSettings.getRandomPalette` is unconditional:
-    ///
-    /// ```java
-    /// return palettes.get(this.getRandom(pos).nextInt(paletteSize));
-    /// ```
-    ///
-    /// Every fossil template ships a single palette, and `nextInt(1)` still consumes one
-    /// `nextInt()` off the shared feature random before the first `BlockRotProcessor` draw.
-    /// Pumpkin skipped it, so both the fossil and its ore overlay read the rot stream one
-    /// draw early.
+    /// The palette pick in `StructurePlaceSettings.getRandomPalette` is unconditional, so a
+    /// single-palette template still burns one `nextInt(1)` off the feature random before the
+    /// first `BlockRotProcessor` draw.
     #[test]
     fn placing_a_template_burns_the_palette_draw_before_the_rot_draws() {
         let world_gen = get_world_gen(
